@@ -1,0 +1,9 @@
+{
+  "sections": {
+    "main": {
+      "type": "case-customizer",
+      "settings": {}
+    }
+  },
+  "order": ["main"]
+}
