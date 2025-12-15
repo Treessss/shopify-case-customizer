@@ -1,0 +1,453 @@
+{%- liquid
+  assign st = section.settings
+  assign custom_product = all_products[st.product_handle]
+  assign model_option_name = st.model_option_name | default: '型号'
+  assign type_option_name = st.case_type_option_name | default: '壳类型'
+  assign fallback_image = st.mockup_image | default: custom_product.featured_image
+  assign canvas_w = st.canvas_width
+  assign image_maps = section.blocks | where: 'type', 'base_image_map'
+  assign stickers = section.blocks | where: 'sticker'
+-%}
+{%- if custom_product == blank -%}
+  <div class="container" style="max-width:1100px;margin:0 auto;padding:20px;">
+    <h2 style="margin:0 0 10px;">{{ 'case_customizer.title' | t | default: 'Please select the product to customize' }}</h2>
+    <p>{{ 'case_customizer.editor.help_select_product' | t | default: 'Open the theme editor and set the product handle in this section' }}</p>
+  </div>
+{%- else -%}
+  <div class="container" style="max-width:1100px;margin:0 auto;padding:20px;">
+    <div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+      <div>
+        <div id="preview-wrap" style="position:relative;border:1px solid #eee;border-radius:8px;overflow:hidden;background:#fff;">
+          <canvas id="customizer-canvas" width="{{ canvas_w }}" height="{{ canvas_w }}"></canvas>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:#666;">{{ 'case_customizer.hint_preview' | t | default: 'Image and text overlay in real time; base image switches by model and case type' }}</div>
+        <div id="sticker-list" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
+          {%- for b in stickers -%}
+            {%- if b.settings.image != blank -%}
+              <img src="{{ b.settings.image | image_url: width: 160 }}" alt="" data-sticker="{{ forloop.index0 }}" style="width:60px;height:60px;object-fit:contain;border:1px solid #ddd;border-radius:6px;cursor:pointer;">
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      </div>
+      <div>
+        {%- assign form_id = 'case-customizer-form-' | append: section.id -%}
+        {%- form 'product', custom_product, id: form_id, class: 'form', novalidate: 'novalidate' -%}
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div>
+              <label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_model' | t | default: 'Phone model' }}</label>
+              <select id="select-model" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></select>
+            </div>
+            <div>
+              <label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_case_type' | t | default: 'Case type' }}</label>
+              <select id="select-type" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></select>
+            </div>
+            <input type="hidden" name="id" id="variant-id">
+            <div>
+              <label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_upload_image' | t | default: 'Upload image' }}</label>
+              <input id="input-image" type="file" accept="image/*" name="properties[{{ 'case_customizer.property.image' | t | default: 'Custom Image' }}]" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.image_x' | t | default: 'Image X (%)' }}]" id="prop-image-x">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.image_y' | t | default: 'Image Y (%)' }}]" id="prop-image-y">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.image_scale' | t | default: 'Image Scale (%)' }}]" id="prop-image-scale">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_image_x' | t | default: 'Image X (%)' }}</label><input id="image-x" type="range" min="0" max="100" value="50" style="width:100%;"></div>
+              <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_image_y' | t | default: 'Image Y (%)' }}</label><input id="image-y" type="range" min="0" max="100" value="50" style="width:100%;"></div>
+              <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_image_scale' | t | default: 'Image scale (%)' }}</label><input id="image-scale" type="range" min="10" max="200" value="100" style="width:100%;"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label style="display:block;margin-bottom:6px;">{{ 'case_customizer.fit_mode_label' | t | default: 'Fit mode' }}</label>
+                <select id="fit-mode" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;">
+                  <option value="cover">{{ 'case_customizer.fit_mode_cover' | t | default: 'Cover' }}</option>
+                  <option value="contain">{{ 'case_customizer.fit_mode_contain' | t | default: 'Contain' }}</option>
+                  <option value="stretch">{{ 'case_customizer.fit_mode_stretch' | t | default: 'Stretch' }}</option>
+                </select>
+                <div style="margin-top:8px;display:flex;gap:12px;align-items:center;">
+                  <label style="display:flex;gap:6px;align-items:center;">
+                    <input id="auto-fit" type="checkbox" checked>
+                    <span>{{ 'case_customizer.auto_fit' | t | default: 'Auto fit after upload' }}</span>
+                  </label>
+                  <label style="display:flex;gap:6px;align-items:center;">
+                    <input id="clip-area" type="checkbox" checked>
+                    <span>{{ 'case_customizer.clip_to_area' | t | default: 'Clip to printable area' }}</span>
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:6px;">{{ 'case_customizer.image_rotation' | t | default: 'Rotation (°)' }}</label>
+                <input id="image-rotation" type="range" min="-180" max="180" value="0" style="width:100%;">
+              </div>
+            </div>
+            <input type="hidden" name="properties[{{ 'case_customizer.property.fit_mode' | t | default: 'Fit Mode' }}]" id="prop-fit-mode">
+            <input type="hidden" name="properties[{{ 'case_customizer.property.rotation' | t | default: 'Rotation (deg)' }}]" id="prop-image-rotation">
+            <div>
+              <label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_text' | t | default: 'Custom text' }}</label>
+              <input id="input-text" type="text" name="properties[{{ 'case_customizer.property.text' | t | default: 'Custom Text' }}]" placeholder="{{ 'case_customizer.field_text_placeholder' | t | default: 'Type your text' }}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.text_x' | t | default: 'Text X (%)' }}]" id="prop-text-x">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.text_y' | t | default: 'Text Y (%)' }}]" id="prop-text-y">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.text_size' | t | default: 'Text Size' }}]" id="prop-text-size">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.text_color' | t | default: 'Text Color' }}]" id="prop-text-color">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_text_x' | t | default: 'Text X (%)' }}</label><input id="text-x" type="range" min="0" max="100" value="50" style="width:100%;"></div>
+              <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_text_y' | t | default: 'Text Y (%)' }}</label><input id="text-y" type="range" min="0" max="100" value="50" style="width:100%;"></div>
+              <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_text_size' | t | default: 'Text size' }}</label><input id="text-size" type="range" min="12" max="64" value="26" style="width:100%;"></div>
+              <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.field_text_color' | t | default: 'Text color' }}</label><input id="text-color" type="color" value="#111111" style="width:100%;height:38px;border:1px solid #ddd;border-radius:6px;"></div>
+            </div>
+            <div>
+              <label style="display:block;margin-bottom:6px;">{{ 'case_customizer.sticker_controls' | t | default: 'Sticker position and scale' }}</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.sticker_x' | t | default: 'Sticker X (%)' }}</label><input id="sticker-x" type="range" min="0" max="100" value="50" style="width:100%;"></div>
+                <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.sticker_y' | t | default: 'Sticker Y (%)' }}</label><input id="sticker-y" type="range" min="0" max="100" value="50" style="width:100%;"></div>
+                <div><label style="display:block;margin-bottom:6px;">{{ 'case_customizer.sticker_scale' | t | default: 'Sticker scale (%)' }}</label><input id="sticker-scale" type="range" min="10" max="200" value="100" style="width:100%;"></div>
+              </div>
+              <input type="hidden" name="properties[{{ 'case_customizer.property.sticker_name' | t | default: 'Sticker Name' }}]" id="prop-sticker-name">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.sticker_x' | t | default: 'Sticker X (%)' }}]" id="prop-sticker-x">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.sticker_y' | t | default: 'Sticker Y (%)' }}]" id="prop-sticker-y">
+              <input type="hidden" name="properties[{{ 'case_customizer.property.sticker_scale' | t | default: 'Sticker Scale (%)' }}]" id="prop-sticker-scale">
+            </div>
+            <div><button type="submit" class="btn-primary" style="width:100%;padding:12px;border:0;border-radius:8px;background:#111;color:#fff;">{{ 'case_customizer.submit_add_to_cart' | t | default: 'Add to cart' }}</button></div>
+          </div>
+          <input type="hidden" id="data-area-left" value="{{ st.area_left }}">
+          <input type="hidden" id="data-area-top" value="{{ st.area_top }}">
+          <input type="hidden" id="data-area-width" value="{{ st.area_width }}">
+          <input type="hidden" id="data-area-height" value="{{ st.area_height }}">
+        {%- endform -%}
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var canvas = document.getElementById('customizer-canvas');
+      var ctx = canvas.getContext('2d');
+      var baseImg = new Image();
+      baseImg.crossOrigin = 'anonymous';
+      var imageMaps = [
+        {%- for m in image_maps -%}
+          {
+            model: {{ m.settings.model_value | json }},
+            type: {{ m.settings.case_type_value | json }},
+            src: {{ m.settings.image | image_url: width: canvas_w | json }},
+            left: {{ m.settings.area_left | default: st.area_left | json }},
+            top: {{ m.settings.area_top | default: st.area_top | json }},
+            width: {{ m.settings.area_width | default: st.area_width | json }},
+            height: {{ m.settings.area_height | default: st.area_height | json }}
+          }{%- unless forloop.last -%},{%- endunless -%}
+        {%- endfor -%}
+      ];
+      var stickers = [
+        {%- for s in stickers -%}
+          {%- if s.settings.image != blank -%}
+            { src: {{ s.settings.image | image_url: width: 600 | json }}, name: {{ s.settings.name | default: 'Sticker ' | append: forloop.index | json }} }
+            {%- unless forloop.last -%},{%- endunless -%}
+          {%- endif -%}
+        {%- endfor -%}
+      ];
+      var areaLeftPct = parseFloat(document.getElementById('data-area-left').value || '10');
+      var areaTopPct = parseFloat(document.getElementById('data-area-top').value || '10');
+      var areaWidthPct = parseFloat(document.getElementById('data-area-width').value || '80');
+      var areaHeightPct = parseFloat(document.getElementById('data-area-height').value || '80');
+      var uploadInput = document.getElementById('input-image');
+      var imgXInput = document.getElementById('image-x');
+      var imgYInput = document.getElementById('image-y');
+      var imgScaleInput = document.getElementById('image-scale');
+      var textInput = document.getElementById('input-text');
+      var textXInput = document.getElementById('text-x');
+      var textYInput = document.getElementById('text-y');
+      var textSizeInput = document.getElementById('text-size');
+      var textColorInput = document.getElementById('text-color');
+      var propImgX = document.getElementById('prop-image-x');
+      var propImgY = document.getElementById('prop-image-y');
+      var propImgScale = document.getElementById('prop-image-scale');
+      var fitModeEl = document.getElementById('fit-mode');
+      var autoFitEl = document.getElementById('auto-fit');
+      var clipEl = document.getElementById('clip-area');
+      var rotationEl = document.getElementById('image-rotation');
+      var propFitMode = document.getElementById('prop-fit-mode');
+      var propImageRotation = document.getElementById('prop-image-rotation');
+      var propTextX = document.getElementById('prop-text-x');
+      var propTextY = document.getElementById('prop-text-y');
+      var propTextSize = document.getElementById('prop-text-size');
+      var propTextColor = document.getElementById('prop-text-color');
+      var stickerXInput = document.getElementById('sticker-x');
+      var stickerYInput = document.getElementById('sticker-y');
+      var stickerScaleInput = document.getElementById('sticker-scale');
+      var propStickerName = document.getElementById('prop-sticker-name');
+      var propStickerX = document.getElementById('prop-sticker-x');
+      var propStickerY = document.getElementById('prop-sticker-y');
+      var propStickerScale = document.getElementById('prop-sticker-scale');
+      var selectModel = document.getElementById('select-model');
+      var selectType = document.getElementById('select-type');
+      var variantIdInput = document.getElementById('variant-id');
+
+      var uploadedImg = new Image();
+      var hasUploaded = false;
+      var stickerImg = new Image();
+      var hasSticker = false;
+
+      function setAreaByMap(map) {
+        if (!map) return;
+        areaLeftPct = parseFloat(map.left);
+        areaTopPct = parseFloat(map.top);
+        areaWidthPct = parseFloat(map.width);
+        areaHeightPct = parseFloat(map.height);
+      }
+
+      function resolveBaseImage(model, type) {
+        var match = imageMaps.find(function(m){ return m.model === model && m.type === type; });
+        if (match) {
+          baseImg.src = match.src;
+          setAreaByMap(match);
+          return;
+        }
+        var v = findVariantByOptions(model, type);
+        if (v && v.featured_media && v.featured_media.preview_image && v.featured_media.preview_image.src) {
+          baseImg.src = v.featured_media.preview_image.src;
+          setAreaByMap({left: {{ st.area_left }}, top: {{ st.area_top }}, width: {{ st.area_width }}, height: {{ st.area_height }}});
+          return;
+        }
+        baseImg.src = {{ fallback_image | image_url: width: canvas_w | json }};
+        setAreaByMap({left: {{ st.area_left }}, top: {{ st.area_top }}, width: {{ st.area_width }}, height: {{ st.area_height }}});
+      }
+
+      function draw() {
+        var ratio = baseImg.width / baseImg.height || 1;
+        canvas.width = {{ canvas_w }};
+        canvas.height = Math.round(canvas.width / ratio);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(baseImg, 0, 0, canvas.width, canvas.height);
+        var areaLeft = canvas.width * areaLeftPct / 100;
+        var areaTop = canvas.height * areaTopPct / 100;
+        var areaW = canvas.width * areaWidthPct / 100;
+        var areaH = canvas.height * areaHeightPct / 100;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(areaLeft, areaTop, areaW, areaH);
+        ctx.restore();
+        if (hasUploaded && uploadedImg.width) {
+          var imgPctX = parseFloat(imgXInput.value || '50');
+          var imgPctY = parseFloat(imgYInput.value || '50');
+          var imgScalePct = parseFloat(imgScaleInput.value || '100');
+          var aspect = uploadedImg.width / uploadedImg.height;
+          var areaAspect = areaW / areaH;
+          var mode = (fitModeEl && fitModeEl.value) || 'cover';
+          propFitMode && (propFitMode.value = mode);
+
+          var imgW, imgH;
+          if (autoFitEl && autoFitEl.checked) {
+            if (mode === 'contain') {
+              if (aspect > areaAspect) { // image wider
+                imgW = areaW;
+                imgH = imgW / aspect;
+              } else {
+                imgH = areaH;
+                imgW = imgH * aspect;
+              }
+            } else if (mode === 'cover') {
+              if (aspect > areaAspect) { // image wider
+                imgH = areaH;
+                imgW = imgH * aspect;
+              } else {
+                imgW = areaW;
+                imgH = imgW / aspect;
+              }
+            } else { // stretch
+              imgW = areaW;
+              imgH = areaH;
+            }
+            var computedScalePct = (imgW / areaW) * 100;
+            imgScalePct = computedScalePct;
+            imgScaleInput && (imgScaleInput.value = Math.round(computedScalePct));
+            imgPctX = 50; imgPctY = 50; // center by default
+            imgXInput && (imgXInput.value = 50);
+            imgYInput && (imgYInput.value = 50);
+          } else {
+            imgW = areaW * (imgScalePct / 100);
+            imgH = imgW / aspect;
+          }
+
+          var imgX = areaLeft + areaW * imgPctX / 100 - imgW / 2;
+          var imgY = areaTop + areaH * imgPctY / 100 - imgH / 2;
+
+          var deg = rotationEl ? parseFloat(rotationEl.value || '0') : 0;
+          propImageRotation && (propImageRotation.value = Math.round(deg));
+
+          if (clipEl && clipEl.checked) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(areaLeft, areaTop, areaW, areaH);
+            ctx.clip();
+          }
+          ctx.save();
+          var cx = imgX + imgW / 2;
+          var cy = imgY + imgH / 2;
+          ctx.translate(cx, cy);
+          ctx.rotate(deg * Math.PI / 180);
+          ctx.drawImage(uploadedImg, -imgW / 2, -imgH / 2, imgW, imgH);
+          ctx.restore();
+          if (clipEl && clipEl.checked) {
+            ctx.restore();
+          }
+
+          propImgX.value = imgPctX.toFixed(2);
+          propImgY.value = imgPctY.toFixed(2);
+          propImgScale.value = parseFloat(imgScalePct).toFixed(2);
+        }
+        var textVal = textInput.value || '';
+        if (textVal.length) {
+          var txPct = parseFloat(textXInput.value || '50');
+          var tyPct = parseFloat(textYInput.value || '50');
+          var tSize = parseInt(textSizeInput.value || '26', 10);
+          var tColor = textColorInput.value || '#111111';
+          var tx = areaLeft + areaW * txPct / 100;
+          var ty = areaTop + areaH * tyPct / 100;
+          ctx.save();
+          ctx.fillStyle = tColor;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = tSize + 'px sans-serif';
+          ctx.fillText(textVal, tx, ty);
+          ctx.restore();
+          propTextX.value = txPct.toFixed(2);
+          propTextY.value = tyPct.toFixed(2);
+          propTextSize.value = tSize;
+          propTextColor.value = tColor;
+        }
+        if (hasSticker && stickerImg.width) {
+          var sxPct = parseFloat(stickerXInput.value || '50');
+          var syPct = parseFloat(stickerYInput.value || '50');
+          var ssPct = parseFloat(stickerScaleInput.value || '100');
+          var sw = areaW * (ssPct / 100);
+          var sh = sw * (stickerImg.height / stickerImg.width);
+          var sx = areaLeft + areaW * sxPct / 100 - sw / 2;
+          var sy = areaTop + areaH * syPct / 100 - sh / 2;
+          ctx.drawImage(stickerImg, sx, sy, sw, sh);
+          propStickerX.value = sxPct.toFixed(2);
+          propStickerY.value = syPct.toFixed(2);
+          propStickerScale.value = ssPct.toFixed(2);
+        }
+      }
+
+      baseImg.onload = draw;
+
+      function findVariantByOptions(model, type) {
+        var variants = {{ custom_product.variants | json }};
+        var optNames = {{ custom_product.options | json }};
+        var idxModel = optNames.indexOf({{ model_option_name | json }});
+        var idxType = optNames.indexOf({{ type_option_name | json }});
+        return variants.find(function(v){
+          var ok = true;
+          if (idxModel === 0 && v.option1 !== model) ok = false;
+          if (idxModel === 1 && v.option2 !== model) ok = false;
+          if (idxModel === 2 && v.option3 !== model) ok = false;
+          if (idxType === 0 && v.option1 !== type) ok = false;
+          if (idxType === 1 && v.option2 !== type) ok = false;
+          if (idxType === 2 && v.option3 !== type) ok = false;
+          return ok;
+        }) || null;
+      }
+
+      function initSelectors() {
+        var opts = {{ custom_product.options_with_values | json }};
+        var modelOpt = opts.find(function(o){ return o.name === {{ model_option_name | json }}; });
+        var typeOpt = opts.find(function(o){ return o.name === {{ type_option_name | json }}; });
+        selectModel.innerHTML = (modelOpt ? modelOpt.values : []).map(function(v){ return '<option>'+v+'</option>'; }).join('');
+        selectType.innerHTML = (typeOpt ? typeOpt.values : []).map(function(v){ return '<option>'+v+'</option>'; }).join('');
+        var m = selectModel.value;
+        var t = selectType.value;
+        var v = findVariantByOptions(m, t) || {{ custom_product.selected_or_first_available_variant | json }};
+        variantIdInput.value = v.id;
+        resolveBaseImage(m, t);
+      }
+
+      uploadInput.addEventListener('change', function(e) {
+        var f = e.target.files && e.target.files[0];
+        if (!f) return;
+        var url = URL.createObjectURL(f);
+        uploadedImg.onload = function() { hasUploaded = true; draw(); };
+        uploadedImg.src = url;
+      });
+
+      document.getElementById('sticker-list').addEventListener('click', function(e){
+        var idx = e.target && e.target.dataset && e.target.dataset.sticker;
+        if (idx == null) return;
+        var item = stickers[parseInt(idx, 10)];
+        if (!item) return;
+        stickerImg.onload = function(){ hasSticker = true; draw(); };
+        stickerImg.src = item.src;
+        propStickerName.value = item.name;
+      });
+
+      [imgXInput, imgYInput, imgScaleInput, textInput, textXInput, textYInput, textSizeInput, textColorInput, stickerXInput, stickerYInput, stickerScaleInput, fitModeEl, autoFitEl, clipEl, rotationEl].forEach(function(el) {
+        el.addEventListener('input', draw);
+      });
+
+      selectModel.addEventListener('change', function(){
+        var m = selectModel.value;
+        var t = selectType.value;
+        var v = findVariantByOptions(m, t) || {{ custom_product.selected_or_first_available_variant | json }};
+        variantIdInput.value = v.id;
+        resolveBaseImage(m, t);
+      });
+      selectType.addEventListener('change', function(){
+        var m = selectModel.value;
+        var t = selectType.value;
+        var v = findVariantByOptions(m, t) || {{ custom_product.selected_or_first_available_variant | json }};
+        variantIdInput.value = v.id;
+        resolveBaseImage(m, t);
+      });
+
+      window.addEventListener('resize', draw);
+      document.addEventListener('visibilitychange', function(){ if (!document.hidden) draw(); });
+
+      baseImg.src = {{ fallback_image | image_url: width: canvas_w | json }};
+      initSelectors();
+    })();
+  </script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Case Customizer",
+  "settings": [
+    { "type": "text", "id": "product_handle", "label": "Product handle", "info": "Handle of the phone case product to customize" },
+    { "type": "text", "id": "model_option_name", "label": "Model option name", "default": "Model" },
+    { "type": "text", "id": "case_type_option_name", "label": "Case type option name", "default": "Case Type" },
+    { "type": "image_picker", "id": "mockup_image", "label": "Default mockup image" },
+    { "type": "range", "id": "canvas_width", "label": "Canvas width", "min": 300, "max": 1200, "step": 50, "default": 700, "unit": "px" },
+    { "type": "range", "id": "area_left", "label": "Printable area Left", "min": 0, "max": 100, "step": 1, "default": 10, "unit": "%" },
+    { "type": "range", "id": "area_top", "label": "Printable area Top", "min": 0, "max": 100, "step": 1, "default": 10, "unit": "%" },
+    { "type": "range", "id": "area_width", "label": "Printable area Width", "min": 10, "max": 100, "step": 1, "default": 80, "unit": "%" },
+    { "type": "range", "id": "area_height", "label": "Printable area Height", "min": 10, "max": 100, "step": 1, "default": 80, "unit": "%" }
+  ],
+  "blocks": [
+    {
+      "type": "base_image_map",
+      "name": "Base image mapping",
+      "settings": [
+        { "type": "text", "id": "model_value", "label": "Model value e.g. iPhone 15" },
+        { "type": "text", "id": "case_type_value", "label": "Case type value e.g. Clear" },
+        { "type": "image_picker", "id": "image", "label": "Base image" },
+        { "type": "range", "id": "area_left", "label": "Left offset for this combo", "min": 0, "max": 100, "step": 1, "default": 10, "unit": "%" },
+        { "type": "range", "id": "area_top", "label": "Top offset for this combo", "min": 0, "max": 100, "step": 1, "default": 10, "unit": "%" },
+        { "type": "range", "id": "area_width", "label": "Area width for this combo", "min": 10, "max": 100, "step": 1, "default": 80, "unit": "%" },
+        { "type": "range", "id": "area_height", "label": "Area height for this combo", "min": 10, "max": 100, "step": 1, "default": 80, "unit": "%" }
+      ]
+    },
+    {
+      "type": "sticker",
+      "name": "Sticker",
+      "settings": [
+        { "type": "text", "id": "name", "label": "Sticker name", "default": "Sticker" },
+        { "type": "image_picker", "id": "image", "label": "Sticker image" }
+      ]
+    }
+  ],
+  "presets": [
+    { "name": "Phone Case Customizer" }
+  ]
+}
+{% endschema %}
