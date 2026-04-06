@@ -3,12 +3,11 @@
 client_id = "ed1dbbde346ce4a411907e6a4e456390"
 name = "facebook_catelog"
 handle = "facebook-catelog"
-application_url = "http://127.0.0.1:9237"
+application_url = "https://shopifyfacebookcatelog.vercel.app"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
