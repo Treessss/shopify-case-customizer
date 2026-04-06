@@ -1,0 +1,6 @@
+roles = ["backend"]
+port = 9237
+webhooks_path = "/webhooks"
+
+[commands]
+dev = "./.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 9237"

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Facebook Catalog Exporter</title>
+    {% if shopify_api_key %}
+    <meta name="shopify-api-key" content="{{ shopify_api_key }}" />
+    {% endif %}
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+    <script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
+  </head>
+  <body>
+    <ui-title-bar title="Facebook Catalog Exporter">
+      <button id="titlebar-export" variant="primary">Export CSV</button>
+    </ui-title-bar>
+
+    <main class="shell">
+      <section class="masthead">
+        <div>
+          <p class="eyebrow">Embedded Shopify Admin App</p>
+          <h1>Export your Shopify catalog to Meta CSV without leaving admin.</h1>
+          <p class="lede">
+            The exporter reads products through Shopify Admin GraphQL, prefers
+            variant-level images, falls back to product media when needed, and
+            emits one CSV row per variant for Meta / Facebook catalogs.
+          </p>
+        </div>
+
+        <aside class="shop-card">
+          <p class="card-label">Detected shop</p>
+          <p id="shop-display" class="shop-domain">{{ default_shop_domain or "Waiting for Shopify context" }}</p>
+          <div class="badge-row">
+            <span class="badge">read_products</span>
+            <span class="badge badge-soft">{{ default_api_version }}</span>
+          </div>
+          <p id="embedded-state" class="shop-note">
+            {% if has_embedded_credentials %}
+            App credentials are available on the server.
+            {% else %}
+            Shopify app credentials are not available yet.
+            {% endif %}
+          </p>
+        </aside>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Export Setup</h2>
+            <p>Runs entirely against the current embedded shop context.</p>
+          </div>
+        </div>
+
+        <form id="export-form" class="form-grid">
+          <label>
+            <span>Shop domain</span>
+            <input
+              id="shop-domain"
+              name="shop_domain"
+              type="text"
+              value="{{ default_shop_domain }}"
+              readonly
+            />
+          </label>
+
+          <label>
+            <span>Export mode</span>
+            <select name="export_mode">
+              <option value="bulk" selected>Bulk operation</option>
+              <option value="direct">Direct pagination</option>
+            </select>
+          </label>
+
+          <label class="full">
+            <span>Product query</span>
+            <input
+              name="product_query"
+              type="text"
+              value="{{ default_product_query }}"
+              placeholder="status:active"
+            />
+          </label>
+
+          <label>
+            <span>API version</span>
+            <input name="api_version" type="text" value="{{ default_api_version }}" readonly />
+          </label>
+
+          <div class="full callout">
+            <p class="callout-title">Authentication flow</p>
+            <p>
+              Frontend requests a Shopify session token from App Bridge, backend
+              verifies the token, then uses the app's server-side credentials to
+              exchange for an Admin API access token when exporting.
+            </p>
+          </div>
+
+          <button type="submit" class="primary">Generate Meta CSV</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Export Status</h2>
+            <p id="job-meta">No export started yet.</p>
+          </div>
+          <button id="download-button" class="ghost hidden" type="button">Download CSV</button>
+        </div>
+
+        <div id="status-card" class="status-card idle">
+          <p id="status-line">Ready to export from the current shop.</p>
+          <p id="detail-line" class="detail">
+            The CSV will include item group IDs, sale prices, and variant-specific images.
+          </p>
+        </div>
+
+        <div id="warnings" class="warnings hidden"></div>
+      </section>
+    </main>
+
+    <script id="embedded-context" type="application/json">{{ embedded_context_json | safe }}</script>
+    <script>
+      const bootstrapContext = JSON.parse(
+        document.getElementById("embedded-context").textContent || "{}"
+      );
+
+      const form = document.getElementById("export-form");
+      const shopInput = document.getElementById("shop-domain");
+      const shopDisplay = document.getElementById("shop-display");
+      const embeddedState = document.getElementById("embedded-state");
+      const titlebarExport = document.getElementById("titlebar-export");
+      const jobMeta = document.getElementById("job-meta");
+      const statusCard = document.getElementById("status-card");
+      const statusLine = document.getElementById("status-line");
+      const detailLine = document.getElementById("detail-line");
+      const warningsBox = document.getElementById("warnings");
+      const downloadButton = document.getElementById("download-button");
+
+      let activeTimer = null;
+      let completedJob = null;
+
+      function setStatus(kind, title, detail) {
+        statusCard.className = `status-card ${kind}`;
+        statusLine.textContent = title;
+        detailLine.textContent = detail;
+      }
+
+      function renderWarnings(items) {
+        if (!items || items.length === 0) {
+          warningsBox.innerHTML = "";
+          warningsBox.classList.add("hidden");
+          return;
+        }
+
+        warningsBox.classList.remove("hidden");
+        warningsBox.innerHTML = `
+          <h3>Warnings</h3>
+          <ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>
+        `;
+      }
+
+      function extractErrorMessage(payload, fallback) {
+        if (!payload) {
+          return fallback;
+        }
+        if (typeof payload.detail === "string" && payload.detail) {
+          return payload.detail;
+        }
+        return fallback;
+      }
+
+      async function getSessionToken() {
+        if (!window.shopify || typeof window.shopify.idToken !== "function") {
+          return null;
+        }
+        return window.shopify.idToken();
+      }
+
+      async function appFetch(url, options = {}) {
+        const headers = new Headers(options.headers || {});
+        const token = await getSessionToken();
+        if (token) {
+          headers.set("Authorization", `Bearer ${token}`);
+        }
+        if (!headers.has("Content-Type") && options.body) {
+          headers.set("Content-Type", "application/json");
+        }
+
+        const response = await fetch(url, {
+          ...options,
+          headers,
+          credentials: "same-origin",
+        });
+
+        if (!response.ok) {
+          let payload = null;
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = null;
+          }
+          throw new Error(extractErrorMessage(payload, `Request failed with status ${response.status}`));
+        }
+
+        return response;
+      }
+
+      async function appFetchJson(url, options = {}) {
+        const response = await appFetch(url, options);
+        return response.json();
+      }
+
+      async function pollJob(jobId) {
+        if (activeTimer) {
+          clearTimeout(activeTimer);
+        }
+
+        try {
+          const payload = await appFetchJson(`/api/jobs/${jobId}`);
+          const job = payload.job;
+          jobMeta.textContent = `Job ${job.id} • ${job.shop_domain}`;
+
+          if (job.status === "queued" || job.status === "running") {
+            setStatus("running", "Export in progress", `${job.export_mode} mode • query: ${job.product_query}`);
+            completedJob = null;
+            downloadButton.classList.add("hidden");
+            renderWarnings([]);
+            activeTimer = setTimeout(() => pollJob(jobId), 2000);
+            return;
+          }
+
+          if (job.status === "completed") {
+            completedJob = job;
+            setStatus(
+              "completed",
+              `Completed with ${job.row_count} rows`,
+              job.warning_count > 0 ? `${job.warning_count} warning(s) detected` : "No warnings detected"
+            );
+            renderWarnings(job.warnings || []);
+            downloadButton.classList.remove("hidden");
+            return;
+          }
+
+          completedJob = null;
+          downloadButton.classList.add("hidden");
+          setStatus("failed", "Export failed", job.error || "Unknown error");
+          renderWarnings(job.warnings || []);
+        } catch (error) {
+          completedJob = null;
+          downloadButton.classList.add("hidden");
+          setStatus("failed", "Export polling failed", error.message || "Network error");
+        }
+      }
+
+      async function downloadCurrentCsv() {
+        if (!completedJob) {
+          return;
+        }
+
+        try {
+          const response = await appFetch(`/api/jobs/${completedJob.id}/download`);
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const fileName = completedJob.file_name || "meta-catalog.csv";
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+          setStatus("failed", "Download failed", error.message || "Unable to download CSV");
+        }
+      }
+
+      function syncShopContext() {
+        const detectedShop = bootstrapContext.shopDomain || "";
+        shopInput.value = detectedShop;
+        shopDisplay.textContent = detectedShop || "Open this app from Shopify admin";
+
+        if (!bootstrapContext.apiKey) {
+          embeddedState.textContent = "Missing SHOPIFY_API_KEY / client ID on the server.";
+          return;
+        }
+
+        if (window.shopify && typeof window.shopify.idToken === "function") {
+          embeddedState.textContent = `Embedded mode active${bootstrapContext.embedded ? " in Shopify admin" : ""}. Session tokens enabled.`;
+        } else {
+          embeddedState.textContent = "App Bridge has not initialized yet. Open this page via Shopify admin preview.";
+        }
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        renderWarnings([]);
+        downloadButton.classList.add("hidden");
+
+        if (!shopInput.value.trim()) {
+          setStatus("failed", "Missing shop context", "Open the app from Shopify admin so the current shop is available.");
+          return;
+        }
+
+        setStatus("running", "Submitting export job", "Creating background task...");
+        const formData = new FormData(form);
+        const payload = Object.fromEntries(formData.entries());
+
+        try {
+          const data = await appFetchJson("/api/jobs", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          const job = data.job;
+          jobMeta.textContent = `Job ${job.id} • ${job.shop_domain}`;
+          await pollJob(job.id);
+        } catch (error) {
+          setStatus("failed", "Unable to start export", error.message || "Unknown error");
+        }
+      });
+
+      downloadButton.addEventListener("click", downloadCurrentCsv);
+      titlebarExport.addEventListener("click", () => form.requestSubmit());
+      window.addEventListener("load", syncShopContext);
+    </script>
+  </body>
+</html>
