@@ -95,6 +95,12 @@
               verifies the token, then uses the app's server-side credentials to
               exchange for an Admin API access token when exporting.
             </p>
+            {% if export_delivery_mode == "inline" %}
+            <p>
+              This deployment is running in serverless mode, so CSV generation
+              happens inline and the download starts immediately when ready.
+            </p>
+            {% endif %}
           </div>
 
           <button type="submit" class="primary">Generate Meta CSV</button>
@@ -138,6 +144,7 @@
       const detailLine = document.getElementById("detail-line");
       const warningsBox = document.getElementById("warnings");
       const downloadButton = document.getElementById("download-button");
+      const exportDeliveryMode = bootstrapContext.exportDeliveryMode || "job";
 
       let activeTimer = null;
       let completedJob = null;
@@ -263,17 +270,53 @@
         try {
           const response = await appFetch(`/api/jobs/${completedJob.id}/download`);
           const blob = await response.blob();
-          const blobUrl = URL.createObjectURL(blob);
           const fileName = completedJob.file_name || "meta-catalog.csv";
-          const link = document.createElement("a");
-          link.href = blobUrl;
-          link.download = fileName;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          URL.revokeObjectURL(blobUrl);
+          triggerBlobDownload(blob, fileName);
         } catch (error) {
           setStatus("failed", "Download failed", error.message || "Unable to download CSV");
+        }
+      }
+
+      function triggerBlobDownload(blob, fileName) {
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(blobUrl);
+      }
+
+      function extractDownloadFileName(response) {
+        const disposition = response.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="?([^"]+)"?/i);
+        return match ? match[1] : "meta-catalog.csv";
+      }
+
+      async function runInlineExport(payload) {
+        completedJob = null;
+        downloadButton.classList.add("hidden");
+        setStatus("running", "Generating CSV", "Preparing download in the current request...");
+
+        try {
+          const response = await appFetch("/api/export.csv", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          const blob = await response.blob();
+          const fileName = extractDownloadFileName(response);
+          const rowCount = response.headers.get("X-Export-Row-Count");
+          const warningCount = response.headers.get("X-Export-Warning-Count");
+          triggerBlobDownload(blob, fileName);
+          setStatus(
+            "completed",
+            rowCount ? `Completed with ${rowCount} rows` : "CSV generated",
+            warningCount && warningCount !== "0" ? `${warningCount} warning(s) detected` : "Download started automatically"
+          );
+          jobMeta.textContent = `Inline export • ${payload.shop_domain}`;
+        } catch (error) {
+          setStatus("failed", "Unable to generate CSV", error.message || "Unknown error");
         }
       }
 
@@ -288,7 +331,7 @@
         }
 
         if (window.shopify && typeof window.shopify.idToken === "function") {
-          embeddedState.textContent = `Embedded mode active${bootstrapContext.embedded ? " in Shopify admin" : ""}. Session tokens enabled.`;
+          embeddedState.textContent = `Embedded mode active${bootstrapContext.embedded ? " in Shopify admin" : ""}. Session tokens enabled${exportDeliveryMode === "inline" ? ", inline downloads active" : ""}.`;
         } else {
           embeddedState.textContent = "App Bridge has not initialized yet. Open this page via Shopify admin preview.";
         }
@@ -304,10 +347,15 @@
           return;
         }
 
-        setStatus("running", "Submitting export job", "Creating background task...");
         const formData = new FormData(form);
         const payload = Object.fromEntries(formData.entries());
 
+        if (exportDeliveryMode === "inline") {
+          await runInlineExport(payload);
+          return;
+        }
+
+        setStatus("running", "Submitting export job", "Creating background task...");
         try {
           const data = await appFetchJson("/api/jobs", {
             method: "POST",

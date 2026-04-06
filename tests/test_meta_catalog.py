@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from app.domain import ImageRef, OptionValue, ProductRecord, ShopContext, VariantRecord
-from app.exporters.meta_catalog import build_meta_catalog_rows, write_meta_catalog_csv
+from app.exporters.meta_catalog import build_meta_catalog_rows, render_meta_catalog_csv, write_meta_catalog_csv
 
 
 class MetaCatalogExporterTests(unittest.TestCase):
@@ -132,6 +132,37 @@ class MetaCatalogExporterTests(unittest.TestCase):
 
         self.assertIn("id,item_group_id,title,description,availability", content)
         self.assertIn("SKU-1", content)
+
+    def test_csv_renderer_outputs_expected_headers(self) -> None:
+        rows = [
+            {
+                "id": "SKU-2",
+                "item_group_id": "200",
+                "title": "Bottle",
+                "description": "Steel bottle",
+                "availability": "in stock",
+                "condition": "new",
+                "price": "20.00 USD",
+                "sale_price": "",
+                "link": "https://example.com/bottle",
+                "image_link": "https://image.example.com/2.jpg",
+                "additional_image_link": "",
+                "brand": "Northwind",
+                "google_product_category": "",
+                "product_type": "Drinkware",
+                "color": "",
+                "size": "",
+                "material": "Steel",
+                "pattern": "",
+                "gtin": "",
+                "mpn": "SKU-2",
+            }
+        ]
+
+        content = render_meta_catalog_csv(rows)
+
+        self.assertIn("id,item_group_id,title,description,availability", content)
+        self.assertIn("SKU-2", content)
 
 
 if __name__ == "__main__":

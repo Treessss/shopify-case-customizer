@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -15,7 +15,11 @@ from app.embedded import (
     build_embedded_context,
     verify_embedded_admin_request,
 )
-from app.exporters.meta_catalog import build_meta_catalog_rows, write_meta_catalog_csv
+from app.exporters.meta_catalog import (
+    build_meta_catalog_rows,
+    render_meta_catalog_csv,
+    write_meta_catalog_csv,
+)
 from app.job_store import job_store
 from app.settings import EXPORTS_DIR, settings
 from app.shopify_client import (
@@ -70,6 +74,7 @@ def index(request: Request) -> HTMLResponse:
                     "host": embedded_context.host,
                     "embedded": embedded_context.embedded,
                     "apiKey": embedded_context.api_key,
+                    "exportDeliveryMode": "inline" if settings.uses_inline_exports else "job",
                 }
             ),
             "default_api_version": settings.default_api_version,
@@ -77,6 +82,7 @@ def index(request: Request) -> HTMLResponse:
             "default_shop_domain": embedded_context.shop_domain or "",
             "shopify_api_key": settings.default_client_id or "",
             "has_embedded_credentials": bool(settings.default_client_id and settings.default_client_secret),
+            "export_delivery_mode": "inline" if settings.uses_inline_exports else "job",
         },
     )
 
@@ -110,6 +116,33 @@ def create_export_job(payload: ExportRequest, request: Request, background_tasks
         ),
     )
     return {"job": job.to_dict()}
+
+
+@app.post("/api/export.csv")
+def export_catalog_csv(payload: ExportRequest, request: Request) -> Response:
+    shop_domain = verify_embedded_admin_request(
+        request,
+        client_id=settings.default_client_id,
+        client_secret=settings.default_client_secret,
+        expected_shop=payload.shop_domain or settings.default_shop_domain,
+    )
+    rows, warnings, file_name = build_export_artifacts(
+        payload.model_copy(
+            update={
+                "shop_domain": shop_domain,
+                "access_token": None,
+                "client_id": None,
+                "client_secret": None,
+            }
+        )
+    )
+    csv_bytes = render_meta_catalog_csv(rows).encode("utf-8-sig")
+    headers = {
+        "Content-Disposition": f'attachment; filename="{file_name}"',
+        "X-Export-Row-Count": str(len(rows)),
+        "X-Export-Warning-Count": str(len(warnings)),
+    }
+    return Response(content=csv_bytes, media_type="text/csv; charset=utf-8", headers=headers)
 
 
 @app.get("/api/jobs/{job_id}")
@@ -157,37 +190,14 @@ def healthcheck() -> dict:
 def run_export_job(job_id: str, payload: ExportRequest) -> None:
     job_store.update(job_id, status="running", error=None, warnings=[])
     try:
-        shop_domain = normalize_shop_domain(payload.shop_domain or settings.default_shop_domain or "")
-        api_version = (payload.api_version or settings.default_api_version).strip()
-        product_query = (payload.product_query or settings.default_product_query).strip()
-        export_mode = payload.export_mode if payload.export_mode in {"bulk", "direct"} else "bulk"
-        access_token = resolve_access_token(payload, shop_domain)
-
-        client = ShopifyGraphQLClient(
-            shop_domain=shop_domain,
-            access_token=access_token,
-            api_version=api_version,
-            timeout_seconds=settings.request_timeout_seconds,
-        )
-        if export_mode == "direct":
-            shop_context, products = client.fetch_products_direct(product_query)
-        else:
-            shop_context, products = client.fetch_products_bulk(
-                product_query,
-                poll_interval_seconds=settings.bulk_poll_interval_seconds,
-                max_wait_seconds=settings.bulk_max_wait_seconds,
-            )
-
-        rows, warnings = build_meta_catalog_rows(shop_context, products)
-        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-        safe_shop_name = shop_domain.replace(".", "-")
-        output_path = EXPORTS_DIR / f"{safe_shop_name}-meta-catalog-{timestamp}.csv"
+        rows, warnings, file_name = build_export_artifacts(payload)
+        output_path = EXPORTS_DIR / file_name
         write_meta_catalog_csv(rows, output_path)
 
         job_store.update(
             job_id,
             status="completed",
-            file_name=output_path.name,
+            file_name=file_name,
             file_path=str(output_path),
             row_count=len(rows),
             warning_count=len(warnings),
@@ -196,6 +206,35 @@ def run_export_job(job_id: str, payload: ExportRequest) -> None:
         )
     except Exception as exc:  # pragma: no cover - surfaced to UI
         job_store.update(job_id, status="failed", error=str(exc))
+
+
+def build_export_artifacts(payload: ExportRequest) -> tuple[list[dict[str, str]], list[str], str]:
+    shop_domain = normalize_shop_domain(payload.shop_domain or settings.default_shop_domain or "")
+    api_version = (payload.api_version or settings.default_api_version).strip()
+    product_query = (payload.product_query or settings.default_product_query).strip()
+    export_mode = payload.export_mode if payload.export_mode in {"bulk", "direct"} else "bulk"
+    access_token = resolve_access_token(payload, shop_domain)
+
+    client = ShopifyGraphQLClient(
+        shop_domain=shop_domain,
+        access_token=access_token,
+        api_version=api_version,
+        timeout_seconds=settings.request_timeout_seconds,
+    )
+    if export_mode == "direct":
+        shop_context, products = client.fetch_products_direct(product_query)
+    else:
+        shop_context, products = client.fetch_products_bulk(
+            product_query,
+            poll_interval_seconds=settings.bulk_poll_interval_seconds,
+            max_wait_seconds=settings.bulk_max_wait_seconds,
+        )
+
+    rows, warnings = build_meta_catalog_rows(shop_context, products)
+    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    safe_shop_name = shop_domain.replace(".", "-")
+    file_name = f"{safe_shop_name}-meta-catalog-{timestamp}.csv"
+    return rows, warnings, file_name
 
 
 def resolve_access_token(payload: ExportRequest, shop_domain: str) -> str:

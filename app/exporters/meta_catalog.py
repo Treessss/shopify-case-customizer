@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from io import StringIO
 import re
 from decimal import Decimal
 from html import unescape
@@ -110,6 +111,14 @@ def write_meta_catalog_csv(rows: list[dict[str, str]], output_path: Path) -> Non
         writer = csv.DictWriter(csv_file, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def render_meta_catalog_csv(rows: list[dict[str, str]]) -> str:
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=CSV_COLUMNS)
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue()
 
 
 def _build_unique_row_id(variant: VariantRecord, used_ids: set[str]) -> str:
