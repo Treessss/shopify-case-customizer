@@ -35,6 +35,7 @@ CSV_COLUMNS = [
     "size",
     "material",
     "pattern",
+    "additional_variant_attributes",
     "custom_data",
     "shipping",
     "shipping weight",
@@ -43,11 +44,41 @@ CSV_COLUMNS = [
 OPTION_FIELD_MAP = {
     "color": "color",
     "colour": "color",
+    "color name": "color",
+    "colour name": "color",
+    "shade": "color",
+    "tone": "color",
     "size": "size",
+    "sizing": "size",
+    "model": "size",
+    "phone model": "size",
+    "device": "size",
+    "device model": "size",
+    "capacity": "size",
     "gender": "gender",
+    "sex": "gender",
     "age group": "age group",
+    "age_group": "age group",
+    "age": "age group",
     "material": "material",
+    "fabric": "material",
+    "composition": "material",
     "pattern": "pattern",
+    "style": "pattern",
+    "design": "pattern",
+    "print": "pattern",
+    "finish": "pattern",
+    "case type": "pattern",
+}
+
+PRIMARY_OPTION_NAMES = {
+    "color",
+    "colour",
+    "size",
+    "gender",
+    "age group",
+    "material",
+    "pattern",
 }
 
 DEFAULT_CONDITION = "new"
@@ -109,6 +140,7 @@ def build_meta_catalog_rows(
             row["size"] = option_values.get("size", "")
             row["material"] = option_values.get("material", "")
             row["pattern"] = option_values.get("pattern", "")
+            row["additional_variant_attributes"] = _build_additional_variant_attributes(variant)
             row["custom_data"] = _build_custom_data(variant)
             row["shipping"] = ""
             row["shipping weight"] = ""
@@ -175,17 +207,38 @@ def _money(amount: Decimal, currency_code: str) -> str:
 
 def _extract_option_values(variant: VariantRecord) -> dict[str, str]:
     values: dict[str, str] = {}
+    priorities: dict[str, int] = {}
     for option in variant.selected_options:
         option_name = _normalize_option_name(option.name)
         mapped_key = OPTION_FIELD_MAP.get(option_name)
-        if mapped_key and option.value.strip():
+        if not mapped_key or not option.value.strip():
+            continue
+        priority = 2 if option_name in PRIMARY_OPTION_NAMES else 1
+        if priority >= priorities.get(mapped_key, 0):
             values[mapped_key] = option.value.strip()
+            priorities[mapped_key] = priority
     return values
 
 
 def _build_custom_data(variant: VariantRecord) -> str:
     payload: dict[str, str] = {}
     for option in variant.selected_options:
+        key = _normalize_custom_data_key(option.name)
+        value = option.value.strip()
+        if not key or not value:
+            continue
+        payload[key] = value
+    if not payload:
+        return ""
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _build_additional_variant_attributes(variant: VariantRecord) -> str:
+    payload: dict[str, str] = {}
+    for option in variant.selected_options:
+        option_name = _normalize_option_name(option.name)
+        if OPTION_FIELD_MAP.get(option_name):
+            continue
         key = _normalize_custom_data_key(option.name)
         value = option.value.strip()
         if not key or not value:

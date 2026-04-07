@@ -61,6 +61,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
         self.assertEqual(rows[0]["sale price"], "89.90 USD")
         self.assertEqual(rows[0]["color"], "Blue")
         self.assertEqual(rows[0]["size"], "42")
+        self.assertEqual(rows[0]["additional_variant_attributes"], "")
         self.assertEqual(rows[0]["custom_data"], '{"color":"Blue","size":"42"}')
         self.assertEqual(warnings, [])
 
@@ -146,9 +147,55 @@ class MetaCatalogExporterTests(unittest.TestCase):
         self.assertEqual(rows[0]["age group"], "adult")
         self.assertEqual(rows[0]["material"], "Softshell")
         self.assertEqual(rows[0]["pattern"], "Solid")
+        self.assertEqual(rows[0]["additional_variant_attributes"], "")
         self.assertEqual(
             rows[0]["custom_data"],
             '{"gender":"unisex","age_group":"adult","material":"Softshell","pattern":"Solid","case_type":"Glossy"}',
+        )
+
+    def test_alias_variant_fields_map_into_meta_standard_fields(self) -> None:
+        product = ProductRecord(
+            id="gid://shopify/Product/4",
+            legacy_id="4",
+            title="Phone Case",
+            handle="phone-case",
+            description="",
+            description_html="<p>Protective case</p>",
+            online_store_url="https://demo-store.com/products/phone-case",
+            vendor="Northwind",
+            product_type="Accessories",
+            category_full_name="Electronics > Communications > Telephony > Mobile Phone Cases",
+            status="ACTIVE",
+            images=[],
+            variants=[
+                VariantRecord(
+                    id="gid://shopify/ProductVariant/41",
+                    legacy_id="41",
+                    title="iPhone 15 / Matte",
+                    sku="CASE-41",
+                    barcode=None,
+                    price=Decimal("29.90"),
+                    compare_at_price=None,
+                    available_for_sale=True,
+                    inventory_quantity=5,
+                    selected_options=[
+                        OptionValue(name="Phone Model", value="iPhone 15"),
+                        OptionValue(name="Finish", value="Matte"),
+                        OptionValue(name="Grip", value="MagSafe"),
+                    ],
+                    images=[],
+                )
+            ],
+        )
+
+        rows, _ = build_meta_catalog_rows(self.shop, [product])
+
+        self.assertEqual(rows[0]["size"], "iPhone 15")
+        self.assertEqual(rows[0]["pattern"], "Matte")
+        self.assertEqual(rows[0]["additional_variant_attributes"], '{"grip":"MagSafe"}')
+        self.assertEqual(
+            rows[0]["custom_data"],
+            '{"phone_model":"iPhone 15","finish":"Matte","grip":"MagSafe"}',
         )
 
     def test_csv_writer_outputs_expected_headers(self) -> None:
@@ -176,6 +223,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
                 "size": "",
                 "material": "",
                 "pattern": "",
+                "additional_variant_attributes": "",
                 "custom_data": '{"style":"Classic"}',
                 "shipping": "",
                 "shipping weight": "",
@@ -188,7 +236,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8-sig")
 
         self.assertIn(
-            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,custom_data,shipping,shipping weight",
+            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,additional_variant_attributes,custom_data,shipping,shipping weight",
             content,
         )
         self.assertIn("101", content)
@@ -218,6 +266,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
                 "size": "",
                 "material": "Steel",
                 "pattern": "",
+                "additional_variant_attributes": "",
                 "custom_data": '{"material":"Steel","size":"500ml"}',
                 "shipping": "",
                 "shipping weight": "",
@@ -227,7 +276,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
         content = render_meta_catalog_csv(rows)
 
         self.assertIn(
-            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,custom_data,shipping,shipping weight",
+            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,additional_variant_attributes,custom_data,shipping,shipping weight",
             content,
         )
         self.assertIn("202", content)
