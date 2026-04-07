@@ -107,7 +107,9 @@
               <code>item group id</code>, and supported variant attributes map
               into official fields like <code>color</code>, <code>size</code>,
               <code>material</code>, <code>pattern</code>,
-              <code>gender</code>, and <code>age group</code>.
+              <code>gender</code>, and <code>age group</code>. All Shopify
+              variant options are also serialized into <code>custom_data</code>
+              so non-standard variant dimensions are preserved.
             </p>
             <p>
               Test mode exports the first 2 matched products and all of their
@@ -137,7 +139,7 @@
         <div id="status-card" class="status-card idle">
           <p id="status-line">Ready to export from the current shop.</p>
           <p id="detail-line" class="detail">
-            The CSV follows Meta's official feed columns, uses Shopify variant IDs, and prefers variant-specific images.
+            The CSV follows Meta's official feed columns, keeps Shopify variant data in official fields plus custom_data, and prefers variant-specific images.
           </p>
         </div>
 

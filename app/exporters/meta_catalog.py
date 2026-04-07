@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from io import StringIO
+import json
 import re
 from decimal import Decimal
 from html import unescape
@@ -34,6 +35,7 @@ CSV_COLUMNS = [
     "size",
     "material",
     "pattern",
+    "custom_data",
     "shipping",
     "shipping weight",
 ]
@@ -107,6 +109,7 @@ def build_meta_catalog_rows(
             row["size"] = option_values.get("size", "")
             row["material"] = option_values.get("material", "")
             row["pattern"] = option_values.get("pattern", "")
+            row["custom_data"] = _build_custom_data(variant)
             row["shipping"] = ""
             row["shipping weight"] = ""
             rows.append(row)
@@ -180,9 +183,29 @@ def _extract_option_values(variant: VariantRecord) -> dict[str, str]:
     return values
 
 
+def _build_custom_data(variant: VariantRecord) -> str:
+    payload: dict[str, str] = {}
+    for option in variant.selected_options:
+        key = _normalize_custom_data_key(option.name)
+        value = option.value.strip()
+        if not key or not value:
+            continue
+        payload[key] = value
+    if not payload:
+        return ""
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
 def _normalize_option_name(value: str) -> str:
     normalized = value.strip().lower().replace("_", " ").replace("-", " ")
     return re.sub(r"\s+", " ", normalized)
+
+
+def _normalize_custom_data_key(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    normalized = re.sub(r"[^a-z0-9_]+", "_", normalized)
+    normalized = re.sub(r"_+", "_", normalized).strip("_")
+    return normalized
 
 
 def _clean_description(raw_value: str) -> str:

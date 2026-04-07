@@ -61,6 +61,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
         self.assertEqual(rows[0]["sale price"], "89.90 USD")
         self.assertEqual(rows[0]["color"], "Blue")
         self.assertEqual(rows[0]["size"], "42")
+        self.assertEqual(rows[0]["custom_data"], '{"color":"Blue","size":"42"}')
         self.assertEqual(warnings, [])
 
     def test_default_title_variant_uses_product_title(self) -> None:
@@ -132,6 +133,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
                         OptionValue(name="Age_Group", value="adult"),
                         OptionValue(name="Material", value="Softshell"),
                         OptionValue(name="Pattern", value="Solid"),
+                        OptionValue(name="Case Type", value="Glossy"),
                     ],
                     images=[],
                 )
@@ -144,6 +146,10 @@ class MetaCatalogExporterTests(unittest.TestCase):
         self.assertEqual(rows[0]["age group"], "adult")
         self.assertEqual(rows[0]["material"], "Softshell")
         self.assertEqual(rows[0]["pattern"], "Solid")
+        self.assertEqual(
+            rows[0]["custom_data"],
+            '{"gender":"unisex","age_group":"adult","material":"Softshell","pattern":"Solid","case_type":"Glossy"}',
+        )
 
     def test_csv_writer_outputs_expected_headers(self) -> None:
         rows = [
@@ -170,6 +176,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
                 "size": "",
                 "material": "",
                 "pattern": "",
+                "custom_data": '{"style":"Classic"}',
                 "shipping": "",
                 "shipping weight": "",
             }
@@ -181,7 +188,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8-sig")
 
         self.assertIn(
-            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,shipping,shipping weight",
+            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,custom_data,shipping,shipping weight",
             content,
         )
         self.assertIn("101", content)
@@ -211,6 +218,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
                 "size": "",
                 "material": "Steel",
                 "pattern": "",
+                "custom_data": '{"material":"Steel","size":"500ml"}',
                 "shipping": "",
                 "shipping weight": "",
             }
@@ -219,7 +227,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
         content = render_meta_catalog_csv(rows)
 
         self.assertIn(
-            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,shipping,shipping weight",
+            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,custom_data,shipping,shipping weight",
             content,
         )
         self.assertIn("202", content)
