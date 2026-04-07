@@ -53,17 +53,12 @@ class MetaCatalogExporterTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["id"], "11")
+        self.assertEqual(rows[0]["item group id"], "1")
         self.assertEqual(rows[0]["title"], "Trail Shoe")
-        self.assertEqual(rows[0]["variant_title"], "Blue / 42")
-        self.assertEqual(rows[0]["variant_options"], "Color: Blue | Size: 42")
-        self.assertEqual(rows[0]["option1_name"], "Color")
-        self.assertEqual(rows[0]["option1_value"], "Blue")
-        self.assertEqual(rows[0]["option2_name"], "Size")
-        self.assertEqual(rows[0]["option2_value"], "42")
-        self.assertEqual(rows[0]["image_link"], "https://cdn.example.com/variant.jpg")
-        self.assertEqual(rows[0]["additional_image_link"], "https://cdn.example.com/product.jpg")
+        self.assertNotIn("variant_title", rows[0])
+        self.assertEqual(rows[0]["image link"], "https://cdn.example.com/variant.jpg")
         self.assertEqual(rows[0]["price"], "99.90 USD")
-        self.assertEqual(rows[0]["sale_price"], "89.90 USD")
+        self.assertEqual(rows[0]["sale price"], "89.90 USD")
         self.assertEqual(rows[0]["color"], "Blue")
         self.assertEqual(rows[0]["size"], "42")
         self.assertEqual(warnings, [])
@@ -102,44 +97,81 @@ class MetaCatalogExporterTests(unittest.TestCase):
         rows, warnings = build_meta_catalog_rows(self.shop, [product])
 
         self.assertEqual(rows[0]["title"], "Beanie")
-        self.assertEqual(rows[0]["variant_title"], "")
-        self.assertEqual(rows[0]["variant_options"], "")
         self.assertEqual(rows[0]["link"], "https://demo-store.myshopify.com/products/beanie?variant=21")
         self.assertEqual(rows[0]["availability"], "out of stock")
         self.assertEqual(len(warnings), 1)
         self.assertIn("has no usable image", warnings[0])
 
+    def test_official_variant_fields_map_supported_option_names(self) -> None:
+        product = ProductRecord(
+            id="gid://shopify/Product/3",
+            legacy_id="3",
+            title="Running Jacket",
+            handle="running-jacket",
+            description="",
+            description_html="<p>Weatherproof shell</p>",
+            online_store_url="https://demo-store.com/products/running-jacket",
+            vendor="Northwind",
+            product_type="Outerwear",
+            category_full_name="Apparel & Accessories > Clothing",
+            status="ACTIVE",
+            images=[],
+            variants=[
+                VariantRecord(
+                    id="gid://shopify/ProductVariant/31",
+                    legacy_id="31",
+                    title="Slate / Adult",
+                    sku="JACKET-31",
+                    barcode=None,
+                    price=Decimal("120"),
+                    compare_at_price=None,
+                    available_for_sale=True,
+                    inventory_quantity=3,
+                    selected_options=[
+                        OptionValue(name="Gender", value="unisex"),
+                        OptionValue(name="Age_Group", value="adult"),
+                        OptionValue(name="Material", value="Softshell"),
+                        OptionValue(name="Pattern", value="Solid"),
+                    ],
+                    images=[],
+                )
+            ],
+        )
+
+        rows, _ = build_meta_catalog_rows(self.shop, [product])
+
+        self.assertEqual(rows[0]["gender"], "unisex")
+        self.assertEqual(rows[0]["age group"], "adult")
+        self.assertEqual(rows[0]["material"], "Softshell")
+        self.assertEqual(rows[0]["pattern"], "Solid")
+
     def test_csv_writer_outputs_expected_headers(self) -> None:
         rows = [
             {
-                "id": "SKU-1",
-                "item_group_id": "100",
+                "id": "101",
                 "title": "Hat",
-                "variant_title": "Black / Large",
-                "variant_options": "Color: Black | Size: Large",
-                "option1_name": "Color",
-                "option1_value": "Black",
-                "option2_name": "Size",
-                "option2_value": "Large",
-                "option3_name": "",
-                "option3_value": "",
                 "description": "Warm hat",
-                "availability": "in stock",
-                "condition": "new",
-                "price": "10.00 USD",
-                "sale_price": "",
+                "google product category": "",
+                "product type": "Accessories",
                 "link": "https://example.com",
-                "image_link": "https://image.example.com/1.jpg",
-                "additional_image_link": "",
+                "image link": "https://image.example.com/1.jpg",
+                "condition": "new",
+                "availability": "in stock",
+                "price": "10.00 USD",
+                "sale price": "",
+                "sale price effective date": "",
+                "gtin": "",
                 "brand": "Northwind",
-                "google_product_category": "",
-                "product_type": "Accessories",
+                "mpn": "SKU-1",
+                "item group id": "100",
+                "gender": "",
+                "age group": "",
                 "color": "",
                 "size": "",
                 "material": "",
                 "pattern": "",
-                "gtin": "",
-                "mpn": "SKU-1",
+                "shipping": "",
+                "shipping weight": "",
             }
         ]
 
@@ -148,47 +180,49 @@ class MetaCatalogExporterTests(unittest.TestCase):
             write_meta_catalog_csv(rows, path)
             content = path.read_text(encoding="utf-8-sig")
 
-        self.assertIn("id,item_group_id,title,variant_title,variant_options,option1_name,option1_value", content)
-        self.assertIn("SKU-1", content)
+        self.assertIn(
+            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,shipping,shipping weight",
+            content,
+        )
+        self.assertIn("101", content)
 
     def test_csv_renderer_outputs_expected_headers(self) -> None:
         rows = [
             {
-                "id": "SKU-2",
-                "item_group_id": "200",
+                "id": "202",
                 "title": "Bottle",
-                "variant_title": "Steel / 500ml",
-                "variant_options": "Material: Steel | Size: 500ml",
-                "option1_name": "Material",
-                "option1_value": "Steel",
-                "option2_name": "Size",
-                "option2_value": "500ml",
-                "option3_name": "",
-                "option3_value": "",
                 "description": "Steel bottle",
-                "availability": "in stock",
-                "condition": "new",
-                "price": "20.00 USD",
-                "sale_price": "",
+                "google product category": "",
+                "product type": "Drinkware",
                 "link": "https://example.com/bottle",
-                "image_link": "https://image.example.com/2.jpg",
-                "additional_image_link": "",
+                "image link": "https://image.example.com/2.jpg",
+                "condition": "new",
+                "availability": "in stock",
+                "price": "20.00 USD",
+                "sale price": "",
+                "sale price effective date": "",
+                "gtin": "",
                 "brand": "Northwind",
-                "google_product_category": "",
-                "product_type": "Drinkware",
+                "mpn": "SKU-2",
+                "item group id": "200",
+                "gender": "",
+                "age group": "",
                 "color": "",
                 "size": "",
                 "material": "Steel",
                 "pattern": "",
-                "gtin": "",
-                "mpn": "SKU-2",
+                "shipping": "",
+                "shipping weight": "",
             }
         ]
 
         content = render_meta_catalog_csv(rows)
 
-        self.assertIn("id,item_group_id,title,variant_title,variant_options,option1_name,option1_value", content)
-        self.assertIn("SKU-2", content)
+        self.assertIn(
+            "id,title,description,google product category,product type,link,image link,condition,availability,price,sale price,sale price effective date,gtin,brand,mpn,item group id,gender,age group,color,size,material,pattern,shipping,shipping weight",
+            content,
+        )
+        self.assertIn("202", content)
 
 
 if __name__ == "__main__":

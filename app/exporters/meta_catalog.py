@@ -13,39 +13,37 @@ from app.domain import ProductRecord, ShopContext, VariantRecord
 
 CSV_COLUMNS = [
     "id",
-    "item_group_id",
     "title",
-    "variant_title",
-    "variant_options",
-    "option1_name",
-    "option1_value",
-    "option2_name",
-    "option2_value",
-    "option3_name",
-    "option3_value",
     "description",
-    "availability",
-    "condition",
-    "price",
-    "sale_price",
+    "google product category",
+    "product type",
     "link",
-    "image_link",
-    "additional_image_link",
+    "image link",
+    "condition",
+    "availability",
+    "price",
+    "sale price",
+    "sale price effective date",
+    "gtin",
     "brand",
-    "google_product_category",
-    "product_type",
+    "mpn",
+    "item group id",
+    "gender",
+    "age group",
     "color",
     "size",
     "material",
     "pattern",
-    "gtin",
-    "mpn",
+    "shipping",
+    "shipping weight",
 ]
 
 OPTION_FIELD_MAP = {
     "color": "color",
     "colour": "color",
     "size": "size",
+    "gender": "gender",
+    "age group": "age group",
     "material": "material",
     "pattern": "pattern",
 }
@@ -85,32 +83,32 @@ def build_meta_catalog_rows(
                 shop.currency_code,
             )
             option_values = _extract_option_values(variant)
-            option_columns = _extract_option_columns(variant)
 
             row = {column: "" for column in CSV_COLUMNS}
             row["id"] = row_id
-            row["item_group_id"] = str(product.legacy_id or _fallback_gid(product.id))
             row["title"] = product.title.strip()
-            row["variant_title"] = _normalize_variant_title(variant)
-            row["variant_options"] = _build_variant_options_summary(variant)
-            row.update(option_columns)
             row["description"] = base_description
-            row["availability"] = "in stock" if variant.available_for_sale else "out of stock"
-            row["condition"] = DEFAULT_CONDITION
-            row["price"] = price
-            row["sale_price"] = sale_price
+            row["google product category"] = (product.category_full_name or "").strip()
+            row["product type"] = (product.product_type or "").strip()
             row["link"] = link
-            row["image_link"] = primary_image
-            row["additional_image_link"] = ",".join(image_urls[1:])
-            row["brand"] = (product.vendor or "").strip()
-            row["google_product_category"] = (product.category_full_name or "").strip()
-            row["product_type"] = (product.product_type or "").strip()
+            row["image link"] = primary_image
+            row["condition"] = DEFAULT_CONDITION
+            row["availability"] = "in stock" if variant.available_for_sale else "out of stock"
+            row["price"] = price
+            row["sale price"] = sale_price
+            row["sale price effective date"] = ""
+            row["gtin"] = (variant.barcode or "").strip()
+            row["brand"] = (product.vendor or shop.store_name or "").strip()
+            row["mpn"] = (variant.sku or "").strip()
+            row["item group id"] = str(product.legacy_id or _fallback_gid(product.id))
+            row["gender"] = option_values.get("gender", "")
+            row["age group"] = option_values.get("age group", "")
             row["color"] = option_values.get("color", "")
             row["size"] = option_values.get("size", "")
             row["material"] = option_values.get("material", "")
             row["pattern"] = option_values.get("pattern", "")
-            row["gtin"] = (variant.barcode or "").strip()
-            row["mpn"] = (variant.sku or "").strip()
+            row["shipping"] = ""
+            row["shipping weight"] = ""
             rows.append(row)
 
     return rows, warnings
@@ -134,24 +132,6 @@ def render_meta_catalog_csv(rows: list[dict[str, str]]) -> str:
 
 def _build_variant_row_id(variant: VariantRecord) -> str:
     return str(variant.legacy_id or _fallback_gid(variant.id))
-
-
-def _normalize_variant_title(variant: VariantRecord) -> str:
-    normalized_variant_title = (variant.title or "").strip()
-    if normalized_variant_title.lower() == "default title" or not normalized_variant_title:
-        return ""
-    return normalized_variant_title
-
-
-def _build_variant_options_summary(variant: VariantRecord) -> str:
-    parts: list[str] = []
-    for option in variant.selected_options:
-        name = option.name.strip()
-        value = option.value.strip()
-        if not name or not value:
-            continue
-        parts.append(f"{name}: {value}")
-    return " | ".join(parts)
 
 
 def _build_variant_link(shop_domain: str, product: ProductRecord, variant: VariantRecord) -> str:
@@ -193,26 +173,16 @@ def _money(amount: Decimal, currency_code: str) -> str:
 def _extract_option_values(variant: VariantRecord) -> dict[str, str]:
     values: dict[str, str] = {}
     for option in variant.selected_options:
-        option_name = option.name.strip().lower()
+        option_name = _normalize_option_name(option.name)
         mapped_key = OPTION_FIELD_MAP.get(option_name)
         if mapped_key and option.value.strip():
             values[mapped_key] = option.value.strip()
     return values
 
 
-def _extract_option_columns(variant: VariantRecord) -> dict[str, str]:
-    columns = {
-        "option1_name": "",
-        "option1_value": "",
-        "option2_name": "",
-        "option2_value": "",
-        "option3_name": "",
-        "option3_value": "",
-    }
-    for index, option in enumerate(variant.selected_options[:3], start=1):
-        columns[f"option{index}_name"] = option.name.strip()
-        columns[f"option{index}_value"] = option.value.strip()
-    return columns
+def _normalize_option_name(value: str) -> str:
+    normalized = value.strip().lower().replace("_", " ").replace("-", " ")
+    return re.sub(r"\s+", " ", normalized)
 
 
 def _clean_description(raw_value: str) -> str:

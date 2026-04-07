@@ -24,7 +24,8 @@
           <p class="lede">
             The exporter reads products through Shopify Admin GraphQL, prefers
             variant-level images, falls back to product media when needed, and
-            emits one CSV row per variant for Meta / Facebook catalogs.
+            emits one CSV row per variant using Meta's official catalog feed
+            columns.
           </p>
         </div>
 
@@ -101,8 +102,12 @@
               exchange for an Admin API access token when exporting.
             </p>
             <p>
-              Variant values are exported in dedicated columns, and each row ID
-              uses the Shopify variant ID.
+              CSV headers follow Meta's official catalog template. Each row ID
+              uses the Shopify variant ID, the parent product ID is written to
+              <code>item group id</code>, and supported variant attributes map
+              into official fields like <code>color</code>, <code>size</code>,
+              <code>material</code>, <code>pattern</code>,
+              <code>gender</code>, and <code>age group</code>.
             </p>
             <p>
               Test mode exports the first 2 matched products and all of their
@@ -132,7 +137,7 @@
         <div id="status-card" class="status-card idle">
           <p id="status-line">Ready to export from the current shop.</p>
           <p id="detail-line" class="detail">
-            The CSV will include Shopify variant IDs, dedicated variant columns, and variant-specific images.
+            The CSV follows Meta's official feed columns, uses Shopify variant IDs, and prefers variant-specific images.
           </p>
         </div>
 
