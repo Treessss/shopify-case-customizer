@@ -42,6 +42,7 @@ class ExportRequest(BaseModel):
     api_version: str | None = None
     export_mode: str = "bulk"
     product_query: str = settings.default_product_query
+    test_mode: bool = False
 
 
 @app.middleware("http")
@@ -95,13 +96,14 @@ def create_export_job(payload: ExportRequest, request: Request, background_tasks
         client_secret=settings.default_client_secret,
         expected_shop=payload.shop_domain or settings.default_shop_domain,
     )
-    export_mode = payload.export_mode if payload.export_mode in {"bulk", "direct"} else "bulk"
+    export_mode = resolve_export_mode(payload)
     product_query = (payload.product_query or settings.default_product_query).strip()
 
     job = job_store.create(
         shop_domain=shop_domain,
         export_mode=export_mode,
         product_query=product_query,
+        test_mode=payload.test_mode,
     )
     background_tasks.add_task(
         run_export_job,
@@ -212,7 +214,8 @@ def build_export_artifacts(payload: ExportRequest) -> tuple[list[dict[str, str]]
     shop_domain = normalize_shop_domain(payload.shop_domain or settings.default_shop_domain or "")
     api_version = (payload.api_version or settings.default_api_version).strip()
     product_query = (payload.product_query or settings.default_product_query).strip()
-    export_mode = payload.export_mode if payload.export_mode in {"bulk", "direct"} else "bulk"
+    export_mode = resolve_export_mode(payload)
+    product_limit = 2 if payload.test_mode else None
     access_token = resolve_access_token(payload, shop_domain)
 
     client = ShopifyGraphQLClient(
@@ -222,7 +225,7 @@ def build_export_artifacts(payload: ExportRequest) -> tuple[list[dict[str, str]]
         timeout_seconds=settings.request_timeout_seconds,
     )
     if export_mode == "direct":
-        shop_context, products = client.fetch_products_direct(product_query)
+        shop_context, products = client.fetch_products_direct(product_query, product_limit=product_limit)
     else:
         shop_context, products = client.fetch_products_bulk(
             product_query,
@@ -233,8 +236,15 @@ def build_export_artifacts(payload: ExportRequest) -> tuple[list[dict[str, str]]
     rows, warnings = build_meta_catalog_rows(shop_context, products)
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
     safe_shop_name = shop_domain.replace(".", "-")
-    file_name = f"{safe_shop_name}-meta-catalog-{timestamp}.csv"
+    file_prefix = f"{safe_shop_name}-test-meta-catalog" if payload.test_mode else f"{safe_shop_name}-meta-catalog"
+    file_name = f"{file_prefix}-{timestamp}.csv"
     return rows, warnings, file_name
+
+
+def resolve_export_mode(payload: ExportRequest) -> str:
+    if payload.test_mode:
+        return "direct"
+    return payload.export_mode if payload.export_mode in {"bulk", "direct"} else "bulk"
 
 
 def resolve_access_token(payload: ExportRequest, shop_domain: str) -> str:

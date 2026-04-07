@@ -123,7 +123,11 @@ class ShopifyGraphQLClient:
             store_name=shop.get("name"),
         )
 
-    def fetch_products_direct(self, product_query: str) -> tuple[ShopContext, list[ProductRecord]]:
+    def fetch_products_direct(
+        self,
+        product_query: str,
+        product_limit: int | None = None,
+    ) -> tuple[ShopContext, list[ProductRecord]]:
         shop_context = self.fetch_shop_context()
         products: list[ProductRecord] = []
         cursor: str | None = None
@@ -200,13 +204,23 @@ class ShopifyGraphQLClient:
         """
 
         while True:
+            page_size = 25
+            if product_limit is not None:
+                remaining = product_limit - len(products)
+                if remaining <= 0:
+                    break
+                page_size = min(page_size, remaining)
             data = self.graphql(
                 query,
-                {"first": 25, "after": cursor, "query": product_query},
+                {"first": page_size, "after": cursor, "query": product_query},
             )
             connection = data["products"]
             for node in connection["nodes"]:
                 products.append(self._parse_product_node(node))
+                if product_limit is not None and len(products) >= product_limit:
+                    break
+            if product_limit is not None and len(products) >= product_limit:
+                break
             if not connection["pageInfo"]["hasNextPage"]:
                 break
             cursor = connection["pageInfo"]["endCursor"]

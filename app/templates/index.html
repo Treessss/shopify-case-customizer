@@ -73,6 +73,11 @@
             </select>
           </label>
 
+          <label>
+            <span>Test mode</span>
+            <input name="test_mode" type="checkbox" />
+          </label>
+
           <label class="full">
             <span>Product query</span>
             <input
@@ -94,6 +99,14 @@
               Frontend requests a Shopify session token from App Bridge, backend
               verifies the token, then uses the app's server-side credentials to
               exchange for an Admin API access token when exporting.
+            </p>
+            <p>
+              Variant values are exported in dedicated columns, and each row ID
+              uses the Shopify variant ID.
+            </p>
+            <p>
+              Test mode exports the first 2 matched products and all of their
+              variants, and automatically uses direct pagination.
             </p>
             {% if export_delivery_mode == "inline" %}
             <p>
@@ -119,7 +132,7 @@
         <div id="status-card" class="status-card idle">
           <p id="status-line">Ready to export from the current shop.</p>
           <p id="detail-line" class="detail">
-            The CSV will include item group IDs, sale prices, and variant-specific images.
+            The CSV will include Shopify variant IDs, dedicated variant columns, and variant-specific images.
           </p>
         </div>
 
@@ -231,7 +244,8 @@
           jobMeta.textContent = `Job ${job.id} • ${job.shop_domain}`;
 
           if (job.status === "queued" || job.status === "running") {
-            setStatus("running", "Export in progress", `${job.export_mode} mode • query: ${job.product_query}`);
+            const testBadge = job.test_mode ? " • test mode" : "";
+            setStatus("running", "Export in progress", `${job.export_mode} mode${testBadge} • query: ${job.product_query}`);
             completedJob = null;
             downloadButton.classList.add("hidden");
             renderWarnings([]);
@@ -349,6 +363,7 @@
 
         const formData = new FormData(form);
         const payload = Object.fromEntries(formData.entries());
+        payload.test_mode = formData.has("test_mode");
 
         if (exportDeliveryMode === "inline") {
           await runInlineExport(payload);

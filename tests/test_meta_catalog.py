@@ -52,6 +52,14 @@ class MetaCatalogExporterTests(unittest.TestCase):
         rows, warnings = build_meta_catalog_rows(self.shop, [product])
 
         self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], "11")
+        self.assertEqual(rows[0]["title"], "Trail Shoe")
+        self.assertEqual(rows[0]["variant_title"], "Blue / 42")
+        self.assertEqual(rows[0]["variant_options"], "Color: Blue | Size: 42")
+        self.assertEqual(rows[0]["option1_name"], "Color")
+        self.assertEqual(rows[0]["option1_value"], "Blue")
+        self.assertEqual(rows[0]["option2_name"], "Size")
+        self.assertEqual(rows[0]["option2_value"], "42")
         self.assertEqual(rows[0]["image_link"], "https://cdn.example.com/variant.jpg")
         self.assertEqual(rows[0]["additional_image_link"], "https://cdn.example.com/product.jpg")
         self.assertEqual(rows[0]["price"], "99.90 USD")
@@ -94,6 +102,8 @@ class MetaCatalogExporterTests(unittest.TestCase):
         rows, warnings = build_meta_catalog_rows(self.shop, [product])
 
         self.assertEqual(rows[0]["title"], "Beanie")
+        self.assertEqual(rows[0]["variant_title"], "")
+        self.assertEqual(rows[0]["variant_options"], "")
         self.assertEqual(rows[0]["link"], "https://demo-store.myshopify.com/products/beanie?variant=21")
         self.assertEqual(rows[0]["availability"], "out of stock")
         self.assertEqual(len(warnings), 1)
@@ -105,6 +115,14 @@ class MetaCatalogExporterTests(unittest.TestCase):
                 "id": "SKU-1",
                 "item_group_id": "100",
                 "title": "Hat",
+                "variant_title": "Black / Large",
+                "variant_options": "Color: Black | Size: Large",
+                "option1_name": "Color",
+                "option1_value": "Black",
+                "option2_name": "Size",
+                "option2_value": "Large",
+                "option3_name": "",
+                "option3_value": "",
                 "description": "Warm hat",
                 "availability": "in stock",
                 "condition": "new",
@@ -130,7 +148,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
             write_meta_catalog_csv(rows, path)
             content = path.read_text(encoding="utf-8-sig")
 
-        self.assertIn("id,item_group_id,title,description,availability", content)
+        self.assertIn("id,item_group_id,title,variant_title,variant_options,option1_name,option1_value", content)
         self.assertIn("SKU-1", content)
 
     def test_csv_renderer_outputs_expected_headers(self) -> None:
@@ -139,6 +157,14 @@ class MetaCatalogExporterTests(unittest.TestCase):
                 "id": "SKU-2",
                 "item_group_id": "200",
                 "title": "Bottle",
+                "variant_title": "Steel / 500ml",
+                "variant_options": "Material: Steel | Size: 500ml",
+                "option1_name": "Material",
+                "option1_value": "Steel",
+                "option2_name": "Size",
+                "option2_value": "500ml",
+                "option3_name": "",
+                "option3_value": "",
                 "description": "Steel bottle",
                 "availability": "in stock",
                 "condition": "new",
@@ -161,7 +187,7 @@ class MetaCatalogExporterTests(unittest.TestCase):
 
         content = render_meta_catalog_csv(rows)
 
-        self.assertIn("id,item_group_id,title,description,availability", content)
+        self.assertIn("id,item_group_id,title,variant_title,variant_options,option1_name,option1_value", content)
         self.assertIn("SKU-2", content)
 
 

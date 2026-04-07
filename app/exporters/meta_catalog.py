@@ -15,6 +15,14 @@ CSV_COLUMNS = [
     "id",
     "item_group_id",
     "title",
+    "variant_title",
+    "variant_options",
+    "option1_name",
+    "option1_value",
+    "option2_name",
+    "option2_value",
+    "option3_name",
+    "option3_value",
     "description",
     "availability",
     "condition",
@@ -51,14 +59,13 @@ def build_meta_catalog_rows(
 ) -> tuple[list[dict[str, str]], list[str]]:
     rows: list[dict[str, str]] = []
     warnings: list[str] = []
-    used_ids: set[str] = set()
 
     for product in products:
         product_image_urls = _unique_urls(product.images)
         base_description = _clean_description(product.description_html or product.description)
 
         for variant in product.variants:
-            row_id = _build_unique_row_id(variant, used_ids)
+            row_id = _build_variant_row_id(variant)
             link = _build_variant_link(shop.shop_domain, product, variant)
             image_urls = _merge_image_urls(_unique_urls(variant.images), product_image_urls)
             primary_image = image_urls[0] if image_urls else ""
@@ -78,11 +85,15 @@ def build_meta_catalog_rows(
                 shop.currency_code,
             )
             option_values = _extract_option_values(variant)
+            option_columns = _extract_option_columns(variant)
 
             row = {column: "" for column in CSV_COLUMNS}
             row["id"] = row_id
             row["item_group_id"] = str(product.legacy_id or _fallback_gid(product.id))
-            row["title"] = _build_variant_title(product.title, variant)
+            row["title"] = product.title.strip()
+            row["variant_title"] = _normalize_variant_title(variant)
+            row["variant_options"] = _build_variant_options_summary(variant)
+            row.update(option_columns)
             row["description"] = base_description
             row["availability"] = "in stock" if variant.available_for_sale else "out of stock"
             row["condition"] = DEFAULT_CONDITION
@@ -121,27 +132,26 @@ def render_meta_catalog_csv(rows: list[dict[str, str]]) -> str:
     return buffer.getvalue()
 
 
-def _build_unique_row_id(variant: VariantRecord, used_ids: set[str]) -> str:
-    preferred = (variant.sku or "").strip() or (variant.legacy_id or _fallback_gid(variant.id))
-    candidate = preferred
-    if candidate not in used_ids:
-        used_ids.add(candidate)
-        return candidate
-
-    suffix = variant.legacy_id or _fallback_gid(variant.id)
-    candidate = f"{preferred}-{suffix}"
-    used_ids.add(candidate)
-    return candidate
+def _build_variant_row_id(variant: VariantRecord) -> str:
+    return str(variant.legacy_id or _fallback_gid(variant.id))
 
 
-def _build_variant_title(product_title: str, variant: VariantRecord) -> str:
-    option_values = [option.value.strip() for option in variant.selected_options if option.value.strip()]
+def _normalize_variant_title(variant: VariantRecord) -> str:
     normalized_variant_title = (variant.title or "").strip()
     if normalized_variant_title.lower() == "default title" or not normalized_variant_title:
-        return product_title.strip()
-    if option_values:
-        return f"{product_title.strip()} - {' / '.join(option_values)}"
-    return f"{product_title.strip()} - {normalized_variant_title}"
+        return ""
+    return normalized_variant_title
+
+
+def _build_variant_options_summary(variant: VariantRecord) -> str:
+    parts: list[str] = []
+    for option in variant.selected_options:
+        name = option.name.strip()
+        value = option.value.strip()
+        if not name or not value:
+            continue
+        parts.append(f"{name}: {value}")
+    return " | ".join(parts)
 
 
 def _build_variant_link(shop_domain: str, product: ProductRecord, variant: VariantRecord) -> str:
@@ -188,6 +198,21 @@ def _extract_option_values(variant: VariantRecord) -> dict[str, str]:
         if mapped_key and option.value.strip():
             values[mapped_key] = option.value.strip()
     return values
+
+
+def _extract_option_columns(variant: VariantRecord) -> dict[str, str]:
+    columns = {
+        "option1_name": "",
+        "option1_value": "",
+        "option2_name": "",
+        "option2_value": "",
+        "option3_name": "",
+        "option3_value": "",
+    }
+    for index, option in enumerate(variant.selected_options[:3], start=1):
+        columns[f"option{index}_name"] = option.name.strip()
+        columns[f"option{index}_value"] = option.value.strip()
+    return columns
 
 
 def _clean_description(raw_value: str) -> str:

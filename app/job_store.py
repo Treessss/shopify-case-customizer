@@ -20,6 +20,7 @@ class ExportJob:
     updated_at: str = field(default_factory=utc_now_iso)
     export_mode: str = "bulk"
     product_query: str = "status:active"
+    test_mode: bool = False
     file_name: str | None = None
     file_path: str | None = None
     row_count: int = 0
@@ -39,13 +40,14 @@ class JobStore:
         self._items: dict[str, ExportJob] = {}
         self._lock = Lock()
 
-    def create(self, shop_domain: str, export_mode: str, product_query: str) -> ExportJob:
+    def create(self, shop_domain: str, export_mode: str, product_query: str, test_mode: bool = False) -> ExportJob:
         with self._lock:
             job = ExportJob(
                 id=str(uuid4()),
                 shop_domain=shop_domain,
                 export_mode=export_mode,
                 product_query=product_query,
+                test_mode=test_mode,
             )
             self._items[job.id] = job
             return job
