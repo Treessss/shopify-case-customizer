@@ -220,6 +220,41 @@ select:focus {
   line-height: 1.7;
 }
 
+.docs-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(75, 91, 183, 0.16);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(75, 91, 183, 0.08), rgba(75, 91, 183, 0.03));
+}
+
+.docs-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.docs-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(75, 91, 183, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #3042a0;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.docs-links a:hover {
+  transform: translateY(-1px);
+  border-color: rgba(75, 91, 183, 0.34);
+  box-shadow: 0 10px 20px rgba(75, 91, 183, 0.12);
+}
+
 .primary,
 .ghost {
   display: inline-flex;
@@ -311,6 +346,10 @@ select:focus {
   .masthead,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .docs-links {
+    flex-direction: column;
   }
 
   .shell {
