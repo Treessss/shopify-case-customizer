@@ -1,0 +1,17 @@
+{
+  "name": "facebook-catelog",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "scripts": {
+    "shopify": "shopify",
+    "dev": "shopify app dev",
+    "info": "shopify app info",
+    "build": "shopify app build",
+    "deploy": "shopify app deploy"
+  },
+  "dependencies": {},
+  "trustedDependencies": [
+    "@shopify/plugin-cloudflare"
+  ],
+  "private": true
+}

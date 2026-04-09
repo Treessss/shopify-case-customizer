@@ -1,0 +1,9 @@
+.env
+.venv/
+.shopify/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+exports/*.csv
+.vercel

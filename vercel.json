@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "destination": "/app/index.py"
+    }
+  ],
+  "functions": {
+    "app/index.py": {
+      "maxDuration": 300,
+      "includeFiles": "{app/templates/**,app/static/**}"
+    }
+  }
+}
